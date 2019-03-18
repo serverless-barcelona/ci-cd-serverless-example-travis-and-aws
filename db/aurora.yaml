@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates an Aurora Serverless Cluster.
+Parameters:
+  App:
+    Type: String
+    Default: AuroraServerless
+    Description: Name for the service, used in the code repository, Lambda function, and pipeline names
+  Version:
+    Type: String
+  DBUsername:
+    Type: String
+  DBPassword:
+    Type: String
+  DBName:
+    Type: String     
+Resources:
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: CloudFormation managed DB subnet group.
+      SubnetIds:
+        - Fn::ImportValue: !Sub "${Version}PrivateSubnet1"
+        - Fn::ImportValue: !Sub "${Version}PrivateSubnet2"
+        - Fn::ImportValue: !Sub "${Version}PrivateSubnet3"
+  RDSCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DatabaseName: 
+        Ref: DBName
+      MasterUsername:
+        Ref: DBUsername
+      MasterUserPassword:
+        Ref: DBPassword
+      Engine: aurora
+      EngineMode: serverless
+      DBSubnetGroupName: !Ref "DatabaseSubnetGroup"
+      VpcSecurityGroupIds: 
+        - Fn::ImportValue: !Sub "${Version}InternalAccessSecurityGroup"
+Outputs:
+  AuroraServerless:
+    Description: Aurora Serverless Endpoint
+    Value: !GetAtt RDSCluster.Endpoint.Address
+    Export:
+      Name: "AuroraServerlessEndpoint"
+  DBUsername:
+    Description: DBUsername
+    Value: !Ref DBUsername
+    Export:
+      Name: "DBUsername" 
+  DBPassword:
+    Description: DBPassword
+    Value: !Ref DBPassword
+    Export:
+      Name: "DBPassword" 
+  DBName:
+    Description: DBName
+    Value: !Ref DBName
+    Export:
+      Name: "DBName"                     

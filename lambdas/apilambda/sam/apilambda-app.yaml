@@ -1,0 +1,41 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda API.
+Parameters:
+  Version:
+    Type: String
+Resources:
+  APILambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../
+      Handler: lambda.handler
+      MemorySize: 512
+      Role:
+        Fn::ImportValue: !Sub "${Version}LambdaBasicExecutionRole"
+      Runtime: python2.7
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${Version}InternalAccessSecurityGroup"
+        SubnetIds:
+          - Fn::ImportValue: !Sub "${Version}PrivateSubnet1"
+          - Fn::ImportValue: !Sub "${Version}PrivateSubnet2"
+          - Fn::ImportValue: !Sub "${Version}PrivateSubnet3"
+      Environment:
+        Variables:
+          DB_ENDPOINT: 
+            Fn::ImportValue: "AuroraServerlessEndpoint"
+          DB_USER:  
+            Fn::ImportValue: "DBUsername"
+          DB_PASSWORD: 
+            Fn::ImportValue: "DBPassword"
+          DB_NAME: 
+            Fn::ImportValue: "DBName"       
+                    
+Outputs:
+  APILambdaArn:
+    Value: !Ref APILambda
+    Export:
+      Name: API-LAMBDA     

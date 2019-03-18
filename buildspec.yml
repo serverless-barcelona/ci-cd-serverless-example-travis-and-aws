@@ -1,0 +1,23 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Hi there!"
+  pre_build:
+    commands:
+      - echo "nothing to do in install in pre_build"
+  build:
+    commands:
+      - echo "Starting build `date` in `pwd`"
+  post_build:
+    commands:
+      - echo "build completed on `date`"
+artifacts:
+  files:
+    - network/vpc.yaml
+    - web/web.yaml
+    - lambdas/**/*
+    - etl/sqs.yaml
+    - db/aurora.yaml
+    - auth/cognito.yaml

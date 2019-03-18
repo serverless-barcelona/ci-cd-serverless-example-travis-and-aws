@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Deploy lambda SQS Worker pipeline.
+Parameters:
+  App:
+    Type: String
+    Default: SQSWorker
+    Description: Name for the service, used in the code repository, Lambda function, and pipeline names
+  Version:
+    Type: String 
+Resources:
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${Version}_${App}_build'
+      Description: Build project for the Lambda service
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: arico/python:2.7-alpine 
+        EnvironmentVariables:
+          - Name: BUILD_OUTPUT_BUCKET
+            Value:
+              Fn::ImportValue: !Sub "${Version}-BucketCode"
+      ServiceRole:
+        Fn::ImportValue: !Sub "${Version}CodeBuildServiceRole"
+      Source:
+          Type: CODEPIPELINE
+
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location:
+          Fn::ImportValue: !Sub "${Version}-BucketCode"
+        Type: S3
+        EncryptionKey:
+          Id:
+            Fn::ImportValue: !Sub "${Version}KmsKey"
+          Type: "KMS"
+      Name: !Sub ${Version}${App}
+      RoleArn:
+        Fn::ImportValue: !Sub "${Version}PipelineExecutionRole"
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: S3Repo
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: 1
+              Configuration:
+                S3Bucket:
+                  Fn::ImportValue: !Sub "${Version}SourceBucketCode"
+                S3ObjectKey: "lambdas/sqslambda.zip"
+              OutputArtifacts:
+                - Name: SourceZip
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: CodeBuild
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceZip
+              OutputArtifacts:
+                - Name: BuiltZip
+        - Name: Prod
+          Actions:
+            - Name: CreateProd
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                RoleArn:
+                  Fn::ImportValue: !Sub "${Version}CloudFormationExecutionRole"
+                StackName: !Sub '${Version}${App}-Stack-Prod'
+                ChangeSetName: !Sub '${App}-ChangeSet-Prod'
+                TemplatePath: BuiltZip::package-sqsworker-app.yaml
+                ParameterOverrides: !Sub '{"Version": "${Version}"}'
+                Capabilities: CAPABILITY_IAM
+              InputArtifacts:
+                - Name: BuiltZip
+              RunOrder: 1
+            - Name: ExecuteProd
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                RoleArn:
+                  Fn::ImportValue: !Sub "${Version}CloudFormationExecutionRole"
+                StackName: !Sub '${Version}${App}-Stack-Prod'
+                ChangeSetName: !Sub '${App}-ChangeSet-Prod'
+              OutputArtifacts:
+                - Name: !Sub '${App}ProdChangeSet'
+              RunOrder: 2

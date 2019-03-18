@@ -1,0 +1,15 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - echo "Starting build `date`"
+      - aws cloudformation package --template-file sam/apilambda-app.yaml --s3-bucket $BUILD_OUTPUT_BUCKET --output-template-file package-apilambda-app.yaml
+  post_build:
+    commands:
+      - echo "build completed on `date`"
+
+artifacts:
+  type: zip
+  files:
+    - package-apilambda-app.yaml

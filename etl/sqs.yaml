@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create SQS Queues and SFTP bucket.
+Parameters:
+  App:
+    Type: String
+    Default: SQS
+    Description: Name for the service, used in the code repository, Lambda function, and pipeline names
+  Version:
+    Type: String
+  DomainName:
+    Type: String      
+Resources:
+  SFTPBucket:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - PriorityQueue
+      - StandardQueue
+      - QueuePolicy
+    Properties:
+      BucketName: !Join [ "", [ "sftp.", !Ref DomainName  ] ]
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !GetAtt PriorityQueue.Arn
+          - Event: s3:ObjectRemoved:*
+            Queue: !GetAtt StandardQueue.Arn
+
+
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    DependsOn:
+      - PriorityQueue
+      - StandardQueue
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - SQS:SendMessage
+            # Target a wildcard resource name based on the same format as QueueName
+            Resource: !Join [ "", [ "arn:aws:sqs:*:*:", !Ref App, "-", "*" ] ]
+            Condition:
+              ArnLike:
+                # Static BucketName used to avoid circular dependency with S3 bucket
+                aws:SourceArn: !Join [ "", ["arn:aws:s3:::", "sftp", ".", !Ref DomainName ] ]
+      Queues:
+        - !Ref PriorityQueue
+        - !Ref StandardQueue
+
+  PriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      DelaySeconds: 0
+      MaximumMessageSize: 262144
+      MessageRetentionPeriod: 864000
+      QueueName: !Join [ "-", [ !Ref App, priority ] ]
+      ReceiveMessageWaitTimeSeconds: 0
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FailureQueue.Arn
+        maxReceiveCount: 10
+      VisibilityTimeout: 300
+
+  StandardQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      DelaySeconds: 0
+      MaximumMessageSize: 262144
+      MessageRetentionPeriod: 864000
+      QueueName: !Join [ "-", [ !Ref App, standard ] ]
+      ReceiveMessageWaitTimeSeconds: 0
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt FailureQueue.Arn
+        maxReceiveCount: 10
+      VisibilityTimeout: 300
+
+  FailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      DelaySeconds: 0
+      MaximumMessageSize: 262144
+      MessageRetentionPeriod: 864000
+      QueueName: !Join [ "-", [ !Ref App, "failure" ] ]
+      ReceiveMessageWaitTimeSeconds: 0
+      VisibilityTimeout: 500
+
+Outputs:
+  PriorityQueue:
+    Description: Priority SQS Queue
+    Value: !GetAtt PriorityQueue.Arn
+    Export:
+      Name: !Sub "${Version}-PriorityQueue"
+  StandardQueue:
+    Description: StandardQueue SQS Queue
+    Value: !GetAtt StandardQueue.Arn
+    Export:
+      Name: !Sub "${Version}-StandardQueue"
+  FailureQueue:
+    Description: Failure SQS Queue
+    Value: !GetAtt FailureQueue.Arn
+    Export:
+      Name: !Sub "${Version}-FailureQueue"
+  SFTPBucket:
+    Description: SFTP Bucket name
+    Value: !Ref SFTPBucket
+    Export:
+      Name: !Sub "${Version}-SFTPBucket"      

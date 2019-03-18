@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create Cognito User Pool and API Gateway
+Parameters:
+  App:
+    Type: String
+    Default: Cognito
+  Version:
+    Type: String      
+
+Resources:
+  APPUserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UserPoolName: app
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: True
+          RequireNumbers: True
+          RequireSymbols: True
+          RequireUppercase: True        
+  APPApi: 
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      ApiKeySourceType: AUTHORIZER
+      Name: "APPAPI"
+  APIProxyResource:
+    Type: AWS::ApiGateway::Resource
+    DependsOn:
+     - APPApi
+    Properties:
+      RestApiId: !Ref APPApi
+      ParentId: !GetAtt [APPApi, RootResourceId]
+      PathPart: '{proxy+}'      
+  APPAPIMethod: 
+    Type: AWS::ApiGateway::Method
+    DependsOn:
+      - APPApi
+      - APPAuthorizer
+    Properties: 
+      RestApiId: !Ref "APPApi"
+      ResourceId: 
+        Fn::GetAtt: 
+          - "APPApi"
+          - "RootResourceId"
+      HttpMethod: "ANY"
+      ResourceId: !Ref APIProxyResource
+      AuthorizationType: "COGNITO_USER_POOLS"
+      AuthorizerId: !Ref "APPAuthorizer"
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: ANY
+        Uri: 
+          !Join [ "", [ !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:", !ImportValue "API-LAMBDA", "/invocations"  ] ]        
+  APPAuthorizer: 
+    Type: AWS::ApiGateway::Authorizer
+    DependsOn:
+       - APPUserPool
+       - APPApi
+    Properties: 
+      Type: "COGNITO_USER_POOLS"
+      IdentitySource: "method.request.header.Auth"
+      Name: "APPAuthorizer"
+      RestApiId: !Ref "APPApi"
+      ProviderARNs:
+        -  !GetAtt
+          - APPUserPool
+          - Arn                    

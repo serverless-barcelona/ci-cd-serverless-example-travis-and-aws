@@ -1,0 +1,32 @@
+language: generic
+
+addons:
+  apt:
+    packages:
+    - zip
+
+script:
+- mkdir infrastructure
+- mkdir upload
+- zip -r9 infrastructure/cloudformationtemplate.zip auth db etl lambdas network web buildspec.yml main.yaml
+- cd lambdas/sqslambda && zip -r9 ../../upload/sqslambda.zip . && cd $TRAVIS_BUILD_DIR
+- cd lambdas/apilambda && zip -r9 ../../upload/apilambda.zip . && cd $TRAVIS_BUILD_DIR
+- rm -rf lambdas && mv upload lambdas
+
+deploy:
+  - provider: s3
+    access_key_id: $AWS_KEY
+    secret_access_key: $AWS_SECRET_KEY
+    bucket: "app-sourcecodebucket-us-east-1"
+    region: us-east-1
+    upload-dir: infrastructure
+    local-dir: infrastructure
+    skip_cleanup: true
+  - provider: s3
+    access_key_id: $AWS_KEY
+    secret_access_key: $AWS_SECRET_KEY
+    bucket: "app-sourcecodebucket-us-east-1"
+    region: us-east-1
+    upload-dir: lambdas
+    local-dir: lambdas
+    skip_cleanup: true
